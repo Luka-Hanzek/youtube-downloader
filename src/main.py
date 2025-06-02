@@ -1,36 +1,51 @@
 from pytubefix import YouTube, Playlist
-from pytubefix.cli import on_progress
 import argparse
+import os
 
 
 def download_audio(url):
-    yt = YouTube(url, on_progress_callback=on_progress)
+    youtube = YouTube(url)
     
-    try:
-        stream = sorted(yt.streams.filter(only_audio=True), key=lambda x: x.bitrate)[-1]
-    except IndexError:
+
+    audio_streams = youtube.streams.filter(only_audio=True)
+    if not audio_streams:
         return
     
-    stream.download()
+    stream = sorted(audio_streams, key=lambda stream: stream.bitrate)[-1]
+    stream.download(output_path=args.dest)
 
-def download_playlist(url):
-    yt = Playlist(url)
 
-    for video in yt.videos:
-        
+def download_playlist_audio(url, skip_existing=True):
+    playlist = Playlist(url)
+
+    if skip_existing:
+        playlist_dir = os.path.join(args.dest, playlist.title)
         try:
-            stream = sorted(video.streams.filter(only_audio=True), key=lambda x: x.bitrate)[-1]
-        except IndexError:
+            existing_tracks = set(os.path.basename(p).split('.')[0] for p in os.listdir(playlist_dir))
+        except FileNotFoundError:
+            existing_tracks = set()
+
+    for video in playlist.videos:
+        if skip_existing:
+            
+            if video.title in existing_tracks:
+                print(f"{video.title} already exists.")
+                continue
+
+        audio_streams = video.streams.filter(only_audio=True)
+        if not audio_streams:
             print(f"{video.watch_url} not downloaded.")
-            continue
-        stream.download()
+        
+        stream = sorted(audio_streams, key=lambda stream: stream.bitrate)[-1]
+        stream.download(output_path=os.path.join(args.dest, playlist.title))
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--url")
-cli_args = parser.parse_args()
+parser.add_argument("--url", required=True)
+parser.add_argument("--dest", required=True)
+args = parser.parse_args()
 
-if "list=" in cli_args.url:
-    download_playlist(cli_args.url)
+if "playlist" in args.url:
+    download_playlist_audio(args.url)
 else:
-    download_audio(cli_args.url)
+    download_audio(args.url)
